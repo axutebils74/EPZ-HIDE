@@ -1,24 +1,204 @@
+
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ZIP HIDE</title>
+<title>EPZ HIDEv0</title>
 <a href="demo.html">去看demo</a>
 <script>
-onerror = function (e){
-    div.innerHTML = e
-}
-onunhandledrejection = function(e){
-    div.innerHTML = e.reason
-}
+    onerror = function (e){
+        div.innerHTML = e
+    }
+    onunhandledrejection = function(e){
+        div.innerHTML = e.reason
+    }
 </script>
-<h1>隐藏EPZ到其他格式文件中 （实际上是copy /b a+b+c）</h1>
+<script src="md5.min.js"></script>
+<script src="lzma.js"></script>
+<script src="lz4.js"></script>
+<script src="lz-string.min.js"></script>
+<script src="jszip.min.js"></script>
 <h3>压缩</h3>
-其他文件<input type="file" id="ff"><br>
-zip文件<input type="file" id="ff1"><br>
-<button id="aa">HIDE</button>
+<input type="file" id="ffo" > 其他文件 <br>
+<input type="file" webkitdirectory id="ff">文件目录 <br>
+<button id="ffb">HIDE</button>
+<style>h3{margin: 4px;}</style>
+<details>
+    <summary>压缩方案</summary>
+    <fieldset id="bb">
+        <legend>压缩方式</legend>
+        <input type="radio" name="a1" id="a0" checked>不压缩&emsp;(建议)<br>
+        <input type="radio" name="a1" id="a1">LZMA压缩<br>
+        <input type="radio" name="a1" id="a2">lz4压缩<br>
+        <input type="radio" name="a1" id="a3">LZString压缩&emsp;(不建议压缩二进制数据)<br>
+        <input type="radio" name="a1" id="a4">最优化压缩&emsp;(指上面取最小的一个)
+    </fieldset>
+    <fieldset>
+        <legend>配置</legend>
+        <input type="checkbox" name="" id="a5">文件信息存入尾部<br>
+        <input type="checkbox" name="" id="a6" checked>压缩头部信息<br>
+        <input type="checkbox" name="" id="a7" checked>对于特殊文件不压缩（建议）<br>
+        <input type="checkbox" name="" id="a8" checked>不保留文件目录<br>
+    </fieldset>
+</details>
 <hr>
-<h3>解压</h3><input type="file" id="ff2">
-<br>
+<h3>解压</h3>
+<input type="file" name="" id="ff1">
+<hr>
 <div id="div"></div>
+<script>
+lzma = LZMA();
+const RADIX = 7;
+const MASK = 2**RADIX - 1;
+const octetify = (n)=> {
+	const octets = [];
+	for (let i = n; i != 0; i >>>= RADIX) {
+		octets.push((((i & MASK) + (octets.length== 0 ? 0 : (MASK + 1)))));
+	}
+	octets.reverse();
+    if(octets.length==0)return [0];
+	return octets;
+};
+function write32(i){
+    return [i>>24&0xff,i>>16&0xff,i>>8&0xff,i&0xff]; 
+}
+const deoctetify = (octets)=>
+	octets.reduce((n, octet)=>
+		(n << RADIX) + (octet & MASK)
+	, 0);
+function getU32(x) {
+    var b = [];
+    var n = 0;
+    b[n++] = (x >> 24) & 0xff;
+    b[n++] = (x >> 16) & 0xff;
+    b[n++] = (x >> 8) & 0xff;
+    b[n++] = (x >> 0) & 0xff;
+    return b;
+}
+ffb.onclick = async function(){
+    if(!ffo.value || !ff.value) throw new Error("文件不全");
+    ab = a5.checked * 2 + a6.checked
+    tail = 0;
+    infocompress = 0;
+    if(ab==0){
+        ab = 62;
+    }else if(ab == 1){
+        infocompress = 1 
+    }else if(ab == 2){
+        tail = 1
+    }else{
+        tail = 1
+        infocompress = 1 
+    }
+     magic = [69,80,90,ab]; // 魔法数字
+     header = [0,0,0,0];
+     arrlen  = 0
+     arr = []
+     brrlen = 0;
+     brr = []
+     obj = {}
+    files = []
+    cc = 0
+    for(var i = 0;i < ff.files.length;i++){
+        var k = ff.files[i]
+        if(a8.checked){
+            k.path = k.webkitRelativePath.replace(/^[^/]+\//,'');
+        }else{
+            k.path = k.webkitRelativePath
+        }
+    }
+    for(var i = 0;i < ff.files.length;i++){
+        div.innerHTML = i + '/' + ff.files.length;
+        var k = ff.files[i]
+        e = new Uint8Array(await k.arrayBuffer());
+        m = md5.hex(e);
+        if(obj[m]) {
+           brr =  brr.concat(octetify(obj[m]),[...new TextEncoder().encode(k.path)],0);
+           brrlen++
+        }else{
+            if(a0.checked){ uu = 0;}
+            if(a1.checked){ uu = 1;}
+            if(a2.checked){ uu = 2;}
+            if(a3.checked){ uu = 3;}
+            if(a4.checked){ uu = 4;}
+            if(a7.checked && !/\.(txt|json|js|html)$/.test(k.name)){
+                uu = 0
+            }else{
+                if(uu == 1){
+                    e =new Uint8Array(lzma.compress(e,{dictSize:1<<23}));
+                }else if(uu == 2) {
+                    e = compress(e);
+                }else if(uu == 3){
+                    try{
+                        e = LZString.compressToUint8Array(new TextDecoder("UTF8",{fatal:true}).decode(e));
+                    }catch(e){
+                        uu = 0;
+                    }
+                }else if(uu == 4){
+                    e1  =new Uint8Array(lzma.compress(e,{dictSize:1<<23}));
+                    e2 = compress(e);
+                    e3 = e;
+                    try{
+                        e3 = LZString.compressToUint8Array(new TextDecoder("UTF8",{fatal:true}).decode(e));
+                    }catch(e){}
+                    min = Math.min(e.length,e1.length,e2.length,e3.length);
+
+                    if(min == e.length){
+                        uu = 0
+                    }else if(min == e2.length){
+                        e = e2
+                        uu = 2
+                    }else if(min == e1.length){
+                        e = e1
+                        uu = 1
+                    }else if(min == e3.length){
+                        e = e3
+                        uu = 3
+                    }
+                }
+            }
+            cc+= e.length;
+            arr = arr.concat(octetify(e.length),[...new TextEncoder().encode(k.path)],0,uu)
+            arrlen++;
+            files.push(e)
+            obj[m] = arrlen;
+        }
+    }
+    div.innerHTML = ff.files.length + '/' + ff.files.length;
+    info = octetify(arrlen).concat(arr,octetify(brrlen),brr);
+    if(infocompress) info = new Uint8Array(lzma.compress(info,{dictSize:1<<23}));
+    header = getU32(info.length);
+    a = new Uint8Array(magic.length+header.length+info.length+cc);
+    a.set(magic)
+    if(tail){
+        t = magic.length;
+    }else{
+        a.set(header,4)
+        a.set(info,8)
+        t = magic.length+header.length+info.length;
+    }
+    for(var i = 0;i<files.length;i++){
+        a.set(files[i],t);
+        t+=files[i].length
+    }
+    if(tail){
+        a.set(info,t);
+        a.set(header,t+info.length);
+    }
+    zip = new Uint8Array(await ffo.files[0].arrayBuffer())
+    data = a;
+    t = new Uint8Array(zip.length + data.length + 17);
+    v = new Uint8Array(17);
+    v.set([0x16,0x45,0x42,0x35])
+    v.set(write32(zip.length),4)
+    v.set(write32(data.length),8)
+    v.set(write32(crc32(v,4,9) ^ (zip.length + data.length + 17)),13);
+    t.set(zip,0)
+    t.set(data,zip.length);
+    t.set(v,zip.length + data.length);
+    let aa = document.createElement('a');
+    aa.href = URL.createObjectURL(new Blob([t]));
+    aa.download = 'compress.'+ffo.files[0].name.split(".").slice(-1)[0];
+    aa.click();
+}    
+</script>
 <script>
 var k,i = 256;
 crcTable = []
@@ -33,43 +213,13 @@ function crc32(data,i,j){
     }
     return crc;
 }
-
 function get32(data,i){
     return data[i] << 24 | data[i+1] << 16 | data[i+2] << 8 | data[i+3]; 
 }
-function write32(i){
-    return [i>>24&0xff,i>>16&0xff,i>>8&0xff,i&0xff]; 
-}
 
-aa.onclick = async function(){
-    if(!ff.value || !ff1.value) throw new Error("文件不全");
-    zip = new Uint8Array(await ff1.files[0].arrayBuffer());
-    data = new Uint8Array(await ff.files[0].arrayBuffer());
-    i = zip.length - 22;
-    while (true) {
-        if (i < 0) throw new Error('NOT A ZIP FORMAT');
-        if (zip[i] != 0x50) {--i;continue;}
-        if (get32(zip,i) == 0x504b0506) break;
-        --i;
-    }
-    t = new Uint8Array(zip.length + data.length + 17);
-    v = new Uint8Array(17);
-    v.set([0x16,0x45,0x42,0x35])
-    v.set(write32(i),4)
-    v.set(write32(data.length),8)
-    v.set(write32(crc32(v,4,9) ^ (zip.length + data.length + 17)),13);
-    t.set(zip.subarray(0,i),0)
-    t.set(data,i);
-    t.set(v,i+ data.length);
-    t.set(zip.subarray(i),i + data.length + 17);
-    let aa = document.createElement('a');
-    aa.href = URL.createObjectURL(new Blob([t]));
-    aa.download = "hide.zip"
-    aa.click();
-}    
-ff2.onchange = async function(){
-    if(!ff2.value) return;
-    zip = new Uint8Array(await ff2.files[0].arrayBuffer());
+ff1.oninput = async function(){
+    if(!ff1.value) return
+    zip = new Uint8Array(await ff1.files[0].slice(-16384).arrayBuffer());
     i = zip.length - 17;
     while (true) {
         if (i < 0) throw new Error('NO HIDDEN INFORMATION');
@@ -81,9 +231,101 @@ ff2.onchange = async function(){
     }
     offset = get32(zip,i+4);
     size = get32(zip,i+8);
-    let aa = document.createElement('a');
-    aa.href = URL.createObjectURL(new Blob([zip.subarray(offset,offset+size)]));
-    aa.download = "other.bin"
-    aa.click();
+    encryptType = zip[i+12];
+    if(encryptType) throw new Error("文件格式错误");
+    k = ff1.files[0].slice(offset,offset+size);
+    epz = {}
+    r = new DataView(await k.slice(0,8).arrayBuffer())
+    magic = r.getInt32();
+    if(magic === 1162893886){
+        var len = r.getUint32(4);
+        epz.i = len + 8
+        epz.l = 8 
+        epz.u = len + 8
+    }else if(magic === 1162893825){
+        epz.h = 1;
+        var len = r.getUint32(4);
+        epz.i = len + 8
+        epz.l = 8 
+        epz.u = len + 8
+    }else if(magic === 1162893826){
+        var len = new DataView(await k.slice(k.size-4).arrayBuffer()).getInt32();
+        epz.i = 4
+        epz.l = k.size-len-4
+        epz.u = k.size-4
+    }else if(magic === 1162893827){
+        var len = new DataView(await k.slice(k.size-4).arrayBuffer()).getInt32();
+        epz.i = 4
+        epz.h = 1;
+        epz.l = k.size-len-4
+        epz.u = k.size-4
+    }else{
+        throw new Error('Not EPZ file');
+    }
+    n = new Uint8Array(await k.slice(epz.l,epz.u).arrayBuffer())
+    if(epz.h) n = lzma.decompress(n);
+    var i = 0;
+    function readVLQ(){
+        var r = 0, e;
+        do {
+            e=n[i++];
+            r = (r << 7) | (e & 127);
+        }while(e & 128);
+        return r;
+    }
+    function readName(){
+        j = i
+        while(n[i++]){}
+        return new TextDecoder().decode(n.subarray(j,i-1))
+    }
+    function readByte(){
+        return n[i++];
+    }
+    var c = epz.i;
+    len = readVLQ()
+    var arr = []
+    for(o=0;o<len;o++){
+        size =  readVLQ();
+        filename = readName();
+        compressmethod = readByte(); 
+        arr.push({
+            l:c,
+            u:c+=size,
+            name:filename,
+            method:compressmethod
+        })
+    }
+    len = readVLQ()
+    for(o=0;o<len;o++){
+        refer =  readVLQ();
+        filename = readName();
+        arr.push({
+            refer:refer,
+            name:filename,
+        })
+    }
+    obj = new JSZip()
+    for(var i = 0;i < arr.length;i++){
+        div.innerHTML = i + '/' + arr.length;
+        j = arr[i].refer ? arr[i].refer-1 : i;  
+        if(j == -1) {obj.folder(arr[i].name);continue;}
+        e = arr[j]
+        data = await k.slice(e.l,e.u).arrayBuffer();
+        if(arr[j].method == 1){
+            data = new Uint8Array(lzma.decompress(new Uint8Array(data))).buffer
+        }else if(arr[j].method == 2){
+            data = decompress(new Uint8Array(data)).buffer
+        }else if(arr[j].method == 3){
+            data = LZString.decompressFromUint8Array(new Uint8Array(data))
+        }
+        await obj.file(arr[i].name,data);
+    }
+    div.innerHTML = arr.length + '/' + arr.length;
+    obj.generateAsync({ type: "blob" }).then(function (blob) {
+        let a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'compress.zip'
+        a.click();
+    });
 }
 </script>
