@@ -1,0 +1,89 @@
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZIP HIDE</title>
+<a href="demo.html">去看demo</a>
+<script>
+onerror = function (e){
+    div.innerHTML = e
+}
+onunhandledrejection = function(e){
+    div.innerHTML = e.reason
+}
+</script>
+<h1>隐藏EPZ到其他格式文件中 （实际上是copy /b a+b+c）</h1>
+<h3>压缩</h3>
+其他文件<input type="file" id="ff"><br>
+zip文件<input type="file" id="ff1"><br>
+<button id="aa">HIDE</button>
+<hr>
+<h3>解压</h3><input type="file" id="ff2">
+<br>
+<div id="div"></div>
+<script>
+var k,i = 256;
+crcTable = []
+for (; i--; crcTable[i] = k) {
+    k = i
+    for (j = 8; j--; ) k = (k & 1) ? 0xedb88320 ^ (k >>> 1) : (k >>> 1)
+}
+function crc32(data,i,j){
+    var crc = -1;
+    for (var k = 0; k < j; k++) {
+        crc = (crc >>> 8) ^ crcTable[(crc ^ data[i+k]) & 0xff]
+    }
+    return crc;
+}
+
+function get32(data,i){
+    return data[i] << 24 | data[i+1] << 16 | data[i+2] << 8 | data[i+3]; 
+}
+function write32(i){
+    return [i>>24&0xff,i>>16&0xff,i>>8&0xff,i&0xff]; 
+}
+
+aa.onclick = async function(){
+    if(!ff.value || !ff1.value) throw new Error("文件不全");
+    zip = new Uint8Array(await ff1.files[0].arrayBuffer());
+    data = new Uint8Array(await ff.files[0].arrayBuffer());
+    i = zip.length - 22;
+    while (true) {
+        if (i < 0) throw new Error('NOT A ZIP FORMAT');
+        if (zip[i] != 0x50) {--i;continue;}
+        if (get32(zip,i) == 0x504b0506) break;
+        --i;
+    }
+    t = new Uint8Array(zip.length + data.length + 17);
+    v = new Uint8Array(17);
+    v.set([0x16,0x45,0x42,0x35])
+    v.set(write32(i),4)
+    v.set(write32(data.length),8)
+    v.set(write32(crc32(v,4,9) ^ (zip.length + data.length + 17)),13);
+    t.set(zip.subarray(0,i),0)
+    t.set(data,i);
+    t.set(v,i+ data.length);
+    t.set(zip.subarray(i),i + data.length + 17);
+    let aa = document.createElement('a');
+    aa.href = URL.createObjectURL(new Blob([t]));
+    aa.download = "hide.zip"
+    aa.click();
+}    
+ff2.onchange = async function(){
+    if(!ff2.value) return;
+    zip = new Uint8Array(await ff2.files[0].arrayBuffer());
+    i = zip.length - 17;
+    while (true) {
+        if (i < 0) throw new Error('NO HIDDEN INFORMATION');
+        if (zip[i] != 0x16) {--i;continue;}
+        if (get32(zip,i) == 0x16454235) {
+            if(crc32(zip,i+4,9)^zip.length == get32(zip,i+13)) break
+        }
+        --i;
+    }
+    offset = get32(zip,i+4);
+    size = get32(zip,i+8);
+    let aa = document.createElement('a');
+    aa.href = URL.createObjectURL(new Blob([zip.subarray(offset,offset+size)]));
+    aa.download = "other.bin"
+    aa.click();
+}
+</script>
